@@ -1,22 +1,13 @@
-// Import necessary modules
+// Backend server
 const express = require('express');
-const mongoose = require('mongoose');
-const cors = require('cors');
-require('dotenv').config();
-
 const app = express();
-app.use(cors());
+const port = 3001;
+const { MongoClient } = require('mongodb');
 app.use(express.json());
+const cors = require('cors');
+app.use(cors());
 
-// Connect to MongoDB
-mongoose.connect(process.env.MONGODB_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
-  .then(() => console.log('MongoDB connected'))  // Log connection success
-  .catch(err => console.error('MongoDB connection error:', err));  // Log any errors
-
-// Register endpoint
+// Register details
 app.post('/api/reg', async (req, res) => {
   const { name, email, password, userType } = req.body;
 
@@ -24,10 +15,15 @@ app.post('/api/reg', async (req, res) => {
     return res.status(400).json({ error: 'All fields are required' });
   }
 
-  try {
-    const collection = mongoose.connection.db.collection('users');
+  const uri = 'mongodb://localhost:27017/myapp';
+  const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology: true });
 
-    // Check if the user already exists
+  try {
+    await client.connect();
+    const database = client.db('bookingdatas');
+    const collection = database.collection('users');
+
+    // Check if user already exists
     const existingUser = await collection.findOne({ email });
     if (existingUser) {
       return res.status(409).json({ error: 'User already exists' });
@@ -36,17 +32,23 @@ app.post('/api/reg', async (req, res) => {
     const result = await collection.insertOne({ name, email, password, userType });
     res.json({ message: 'Registration successful', insertedId: result.insertedId });
   } catch (error) {
-    console.error('Error during registration:', error);
+    console.error('Error:', error);
     res.status(500).json({ error: 'Registration failed' });
+  } finally {
+    await client.close();
   }
 });
 
-// Signin endpoint
+// Signin
 app.post('/api/sin', async (req, res) => {
   const { email, password } = req.body;
+  const uri = 'mongodb://localhost:27017/myapp';
+  const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology: true });
 
   try {
-    const collection = mongoose.connection.db.collection('users');
+    await client.connect();
+    const database = client.db('bookingdatas');
+    const collection = database.collection('users');
 
     const user = await collection.findOne({ email });
 
@@ -56,38 +58,41 @@ app.post('/api/sin', async (req, res) => {
       res.status(401).json({ error: 'Invalid credentials' });
     }
   } catch (error) {
-    console.error('Error during sign-in:', error);
+    console.error('Error:', error);
     res.status(500).json({ error: 'Sign-in failed' });
+  } finally {
+    await client.close();
   }
 });
 
-// Dashboard details endpoint
+// Dashboard details
 app.get('/api/userdata', async (req, res) => {
-  const email = req.query.email;  // Changed to req.query for better practice
+  const { email } = req.query;
+  const uri = 'mongodb://localhost:27017/myapp';
+  const client = new MongoClient(uri, { useUnifiedTopology: true });
 
   try {
-    const collection = mongoose.connection.db.collection('users');
+    await client.connect();
+    const database = client.db('bookingdatas');
+    const collection = database.collection('users');
 
     const user = await collection.findOne({ email });
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-
+    console.log(user);
     const userData = {
       name: user.name,
-      number: user.number || 'Not Provided',  // Default value if number is not present
+      number: user.number,
       email: user.email,
     };
-
-    res.json(userData);
+    res.send(userData);
   } catch (error) {
-    console.error('Error fetching user data:', error);
+    console.error(error);
     res.status(500).json({ error: 'Internal server error' });
+  } finally {
+    await client.close();
   }
 });
 
-// Start the server
-const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+// Port
+app.listen(port, () => {
+  console.log(`Server is running on port ${port}`);
 });
